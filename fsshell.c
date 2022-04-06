@@ -626,8 +626,9 @@ int main (int argc, char * argv[])
 	char * filename;
 	uint64_t volumeSize;
 	uint64_t blockSize;
-    int retVal;
+  int retVal;
     
+	printf("test1\n");
 	if (argc > 3)
 		{
 		filename = argv[1];
