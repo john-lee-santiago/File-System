@@ -48,7 +48,6 @@ struct FSInfo
 struct fsFat 
 	{
   uint32_t fat[10000];
-  // track index of nxt available free space
   uint32_t startingBlock;
 	};
 
@@ -80,3 +79,6 @@ extern struct Directory * ROOTptr;
 
 int initVCB(uint64_t numberOfBlocks, uint64_t blockSize);
 int initFAT(uint64_t numberOfBlocks, uint64_t blockSize);
+int initRootDirectory();
+uint16_t getCurrentTime(struct tm* time);
+uint16_t getCurrentDate(struct tm* time);

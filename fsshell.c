@@ -14,7 +14,6 @@
 * when you are ready to test that feature
 *
 **************************************************************/
-#pragma once
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -662,8 +661,6 @@ int main (int argc, char * argv[])
 
 	using_history();
 	stifle_history(200);	//max history entries
-	printf("test\n");
-	printf("block size from vcbptr: %d\n", VCBptr->BytesPerSector);
 	while (1)
 		{
 		cmdin = readline("Prompt > ");

@@ -176,65 +176,11 @@ int initRootDirectory() {
 		ROOTptr->Directory[i].DIR_FstClusHI = rootStartingBlock >> 8;
 		ROOTptr->Directory[i].DIR_FstClusLO = rootStartingBlock % 256;
 		ROOTptr->Directory[i].DIR_FileSize = VCBptr->BytesPerSector;
-		time_t currTime;
-  	time(&currTime);
-  	char* token;
-  	char* timeTok = ctime(&currTime);
-  	int timeArray[6];
-  	token = strtok(timeTok, " :");
-  	timeTok = NULL;
-  	for(int i = 0; i < 6; i++) {
-    	token = strtok(timeTok, " :");
-    	if(i == 0) {
-      	if(strncmp(token, "Jan", 3) == 0){
-        	timeArray[i] = 1;
-      	}
-      	else if (strncmp(token, "Feb", 3) == 0){
-        	timeArray[i] = 2;
-      	}
-	      else if (strncmp(token, "Mar", 3) == 0){
-  	      timeArray[i] = 3;
-    	  }
-      	else if (strncmp(token, "Apr", 3) == 0){
-        	timeArray[i] = 4;
-	      }
-  	    else if (strncmp(token, "May", 3) == 0){
-    	    timeArray[i] = 5;
-      	}
-      	else if (strncmp(token, "Jun", 3) == 0){
-        	timeArray[i] = 6;
-    	  }
-    	  else if (strncmp(token, "Jul", 3) == 0){
-    	    timeArray[i] = 7;
-    	  }
-    	  else if (strncmp(token, "Aug", 3) == 0){
-    	    timeArray[i] = 8;
-    	  }
-    	  else if (strncmp(token, "Sep", 3) == 0){
-    	    timeArray[i] = 9;
-    	  }
-    	  else if (strncmp(token, "Oct", 3) == 0){
-    	    timeArray[i] = 10;
-    	  }
-    	  else if (strncmp(token, "Nov", 3) == 0){
-    	    timeArray[i] = 11;
-    	  }
-    	  else {
-    	    timeArray[i] = 12;
-    	  }
-    	}
-    	else {
-      	timeArray[i] = atoi(token);
-    	}
-  	}
-		ROOTptr->Directory[i].DIR_WrtDate = timeArray[1] +
-																				(timeArray[0] << 5) +
-																				((timeArray[5]-1980) << 9);
-		ROOTptr->Directory[i].DIR_WrtTime = (timeArray[4]/2) +
-																				(timeArray[0] << 5) +
-																				((timeArray[5]-1980) << 11);
-	}
-
+		time_t currTime = time(NULL);
+		struct tm * time = localtime(&currTime);
+		ROOTptr->Directory[i].DIR_WrtTime = getCurrentTime(time);
+		ROOTptr->Directory[i].DIR_WrtDate = getCurrentDate(time);
+		}
 	VCBptr->RootCluster = rootStartingBlock;
 	LBAwrite(VCBptr, VCBptr->BytesPerSector, 0);
 	LBAwrite(ROOTptr, 1, rootStartingBlock);
@@ -251,6 +197,16 @@ int initRootDirectory() {
 	return 0;
 }
 
+uint16_t getCurrentTime(struct tm* time)
+	{
+	return (time->tm_sec / 2) | (time->tm_min << 5) | (time->tm_hour << 11);
+	}
+
+uint16_t getCurrentDate(struct tm* time)
+	{
+	return (time->tm_mday) | ((time->tm_mon + 1) << 5) | ((time->tm_year - 80) << 9);
+	}
+
 int initFileSystem (uint64_t numberOfBlocks, uint64_t blockSize)
 	{
 	printf ("Initializing File System with %ld blocks with a block size of %ld\n", numberOfBlocks, blockSize);
@@ -265,14 +221,14 @@ int initFileSystem (uint64_t numberOfBlocks, uint64_t blockSize)
 		}
 	else
 		{
-			FSIptr = malloc(sizeof(struct FSInfo));
-			FATptr1 = malloc(sizeof(struct fsFat));
-			FATptr2 = malloc(sizeof(struct fsFat));
-			ROOTptr = malloc(sizeof(struct Directory));
-			LBAread(FSIptr, 1, 1);
-			LBAread(FATptr1, VCBptr->FATSz32, 2);
-			LBAread(FATptr2, VCBptr->FATSz32, 81);
-			LBAread(ROOTptr, blockSize, VCBptr->RootCluster);
+		FSIptr = malloc(sizeof(struct FSInfo));
+		FATptr1 = malloc(blockSize * VCBptr->FATSz32);
+		FATptr2 = malloc(blockSize * VCBptr->FATSz32);
+		ROOTptr = malloc(sizeof(struct Directory));
+		LBAread(FSIptr, 1, 1);
+		LBAread(FATptr1, VCBptr->FATSz32, 2);
+		LBAread(FATptr2, VCBptr->FATSz32, 81);
+		LBAread(ROOTptr, 1, VCBptr->RootCluster);
 		}
 
 	return 0;

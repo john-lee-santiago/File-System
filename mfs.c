@@ -1,6 +1,7 @@
 //include any other header files you need
 
 #include "mfs.h"
+#include "fsInit.h"
 
 
 int fs_mkdir(const char *pathname, mode_t mode)
