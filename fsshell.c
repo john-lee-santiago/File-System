@@ -14,7 +14,7 @@
 * when you are ready to test that feature
 *
 **************************************************************/
-
+#pragma once
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -27,6 +27,7 @@
 
 #include "fsLow.h"
 #include "mfs.h"
+#include "fsInit.h"
 
 #define PERMISSIONS (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -628,7 +629,6 @@ int main (int argc, char * argv[])
 	uint64_t blockSize;
   int retVal;
     
-	printf("test1\n");
 	if (argc > 3)
 		{
 		filename = argv[1];
@@ -662,7 +662,8 @@ int main (int argc, char * argv[])
 
 	using_history();
 	stifle_history(200);	//max history entries
-	
+	printf("test\n");
+	printf("block size from vcbptr: %d\n", VCBptr->BytesPerSector);
 	while (1)
 		{
 		cmdin = readline("Prompt > ");

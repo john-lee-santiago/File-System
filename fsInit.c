@@ -24,39 +24,13 @@
 
 #include "fsLow.h"
 #include "mfs.h"
+#include "fsInit.h"
 
-#pragma pack(1)
-struct VCB {
-	uint8_t jmpBoot[3];
-	char OEMName[8];
-	uint16_t BytesPerSector;
-	uint8_t SectorPerCluster;
-	uint16_t RsvdSectorCount;
-	uint8_t NumOfFATs;
-	uint16_t RootEntryCount;
-	uint16_t TotalSectors16;
-	uint8_t Media;
-	uint16_t FATSz16;
-	uint16_t SectorsPerTrack;
-	uint16_t NumberOfHeads;
-	uint32_t HiddenSectors;
-	uint32_t TotalSectors32;
-	uint32_t FATSz32;
-	uint16_t ExtFlags;
-	uint16_t FSVer;
-	uint32_t RootCluster;
-	uint16_t FSInfo;
-	uint16_t BkBootSector;
-	uint8_t Reserved0[12];
-	uint8_t DriverNumber;
-	uint8_t Reserved1;
-	uint8_t BootSig;
-	uint32_t VolumeID;
-	char VolumeLabel[11] ;
-	char FileSystemType[8];
-	uint8_t Reserved2[420];
-	uint16_t Signature;
-} *VCBptr ;
+struct VCB * VCBptr;
+struct FSInfo * FSIptr;
+struct fsFat * FATptr1, * FATptr2;
+struct Directory * ROOTptr;
+
 
 int initVCB(uint64_t numberOfBlocks, uint64_t blockSize)
 	{
@@ -82,146 +56,109 @@ int initVCB(uint64_t numberOfBlocks, uint64_t blockSize)
 	VCBptr->RootCluster = 2;
 	VCBptr->FSInfo = 1;
 	VCBptr->BkBootSector = 0;
-	for (int i = 0 ; i < 12; i++) {
+	for (int i = 0 ; i < 12; i++)
+		{
 		VCBptr->Reserved0[i] = 0;
-	}
+		}
 	VCBptr->DriverNumber = 128;
 	VCBptr->Reserved1 = 0;
 	VCBptr->BootSig = 41;
 	VCBptr->VolumeID = 1337;
 	strcpy(VCBptr->VolumeLabel, "MJ'sFS");
 	strcpy(VCBptr->FileSystemType, "FAT32");
-	for(int i = 0 ; i < 420 ; i++) {
+	for(int i = 0 ; i < 420 ; i++)
+		{
 		VCBptr->Reserved2[420] = 0;
-	}
+		}
 	VCBptr->Signature = 43605;
 	LBAwrite(VCBptr, 1, 0);
 	return 0;
 	}
 
-struct fsFat 
-	{
-  uint32_t fat[10000];
-  // track index of nxt available free space
-  uint32_t startingBlock;
-	} *FATptr1, *FATptr2;
-
-struct FSInfo
-	{
-  uint32_t FSI_LeadSig;
-  uint32_t FSI_Reserved1[120];
-  uint32_t FSI_StrucSig;
-  uint32_t FSI_Free_Count;
-  uint32_t FSI_Nxt_Free;
-  uint32_t FSI_Reserved2[3];
-  uint32_t FSI_TrailSig;
-	} *FSI_ptr;
-
 int initFAT(uint64_t numberOfBlocks, uint64_t blockSize)
-{
-    // allocate and initialize FSInfo struct
-    FSI_ptr = malloc(blockSize); 
+	{
+  // allocate and initialize FSInfo struct
+  FSIptr = malloc(blockSize); 
 
-    FSI_ptr->FSI_LeadSig = 0x41615252;
-    for (int i = 0; i < 120; i++)
-    {
-        FSI_ptr->FSI_Reserved1[i] = 0;
-    }
-    FSI_ptr->FSI_StrucSig = 0x61417272;
-    FSI_ptr->FSI_Free_Count = numberOfBlocks - VCBptr->RsvdSectorCount; // -2 bc vcb and FSInfo take up 2 blocks
-    FSI_ptr->FSI_Nxt_Free = VCBptr->RootCluster;
-    for (int i = 0; i < 3; i++)
-    {
-        FSI_ptr->FSI_Reserved2[i] = 0;
-    }
-    FSI_ptr->FSI_TrailSig = 0xAA550000;
+  FSIptr->FSI_LeadSig = 0x41615252;
+  for (int i = 0; i < 120; i++)
+  	{
+    FSIptr->FSI_Reserved1[i] = 0;
+  	}
+  FSIptr->FSI_StrucSig = 0x61417272;
+  FSIptr->FSI_Free_Count = numberOfBlocks - VCBptr->RsvdSectorCount; // -2 bc vcb and FSInfo take up 2 blocks
+  FSIptr->FSI_Nxt_Free = VCBptr->RootCluster;
+  for (int i = 0; i < 3; i++)
+  	{
+    FSIptr->FSI_Reserved2[i] = 0;
+  	}
+  FSIptr->FSI_TrailSig = 0xAA550000;
 
-		LBAwrite(FSI_ptr, 1, 1);
+	LBAwrite(FSIptr, 1, 1);
 
-    // FAT32 filesystem has 2 copies of the FAT
-    FATptr1 = malloc(sizeof(struct fsFat));
-		// calculate number of blocks the fat will use
-    int FATSize = sizeof(struct fsFat) / blockSize;
-		if (sizeof(struct fsFat) % blockSize > 0)
-    {
-        FATSize++;
-    }
-    FATptr1->fat[0] = 1; // reserved for VCB
-    FATptr1->fat[1] = 1; // reserved for FSInfo block
-    for (int i = 2; i < 10000; i++)
-    {
-        FATptr1->fat[i] = 0;
-    }
-		FATptr1->startingBlock = FSI_ptr->FSI_Nxt_Free;
+  // FAT32 filesystem has 2 copies of the FAT
+  FATptr1 = malloc(sizeof(struct fsFat));
+	// calculate number of blocks the fat will use
+  int FATSize = sizeof(struct fsFat) / blockSize;
+	if (sizeof(struct fsFat) % blockSize > 0)
+  	{
+    FATSize++;
+  	}
+  FATptr1->fat[0] = 1; // reserved for VCB
+  FATptr1->fat[1] = 1; // reserved for FSInfo block
+  for (int i = 2; i < 10000; i++)
+  	{
+    FATptr1->fat[i] = 0;
+  	}
+	FATptr1->startingBlock = FSIptr->FSI_Nxt_Free;
 
-    FATptr2 = malloc(sizeof(struct fsFat));
-    FATptr2->fat[0] = 1; // reserved for VCB
-    FATptr2->fat[1] = 1; // reserved for FSInfo block
-    for (int i = 2; i < 10000; i++)
-    {
-        FATptr2->fat[i] = 0;
-    }
-		FATptr2->startingBlock = FSI_ptr->FSI_Nxt_Free + FATSize;
-		
+  FATptr2 = malloc(sizeof(struct fsFat));
+  FATptr2->fat[0] = 1; // reserved for VCB
+  FATptr2->fat[1] = 1; // reserved for FSInfo block
+  for (int i = 2; i < 10000; i++)
+  	{
+    FATptr2->fat[i] = 0;
+  	}
+	FATptr2->startingBlock = FSIptr->FSI_Nxt_Free + FATSize;
 
-    for(int i = 0; i < FATSize; i++)
-    {
-        if(i == FATSize - 1)
-        {
-            FATptr1->fat[i + FATptr1->startingBlock] = 0x0FFFFFFF;
-						FATptr2->fat[i + FATptr1->startingBlock] = 0x0FFFFFFF;
-        }
-        else
-        {
-            FATptr1->fat[i + FATptr1->startingBlock] = i + FATptr1->startingBlock + 1;
-						FATptr2->fat[i + FATptr1->startingBlock] = i + FATptr1->startingBlock + 1;
-        }
-    }
-    for(int i = 0; i < FATSize; i++)
-    {
-        if(i == FATSize - 1)
-        {
-            FATptr1->fat[i + FATptr2->startingBlock] = 0x0FFFFFFF;
-						FATptr2->fat[i + FATptr2->startingBlock] = 0x0FFFFFFF;
-        }
-        else
-        {
-            FATptr1->fat[i + FATptr2->startingBlock] = i + FATptr2->startingBlock + 1;
-						FATptr2->fat[i + FATptr2->startingBlock] = i + FATptr2->startingBlock + 1;
-        }
-    }
-    FSI_ptr->FSI_Nxt_Free += (2 * FATSize);
-    FSI_ptr->FSI_Free_Count -= (2 * FATSize);
+  for(int i = 0; i < FATSize; i++)
+  	{
+    if(i == FATSize - 1)
+    	{
+      FATptr1->fat[i + FATptr1->startingBlock] = 0x0FFFFFFF;
+			FATptr2->fat[i + FATptr1->startingBlock] = 0x0FFFFFFF;
+    	}
+    else
+    	{
+      FATptr1->fat[i + FATptr1->startingBlock] = i + FATptr1->startingBlock + 1;
+			FATptr2->fat[i + FATptr1->startingBlock] = i + FATptr1->startingBlock + 1;
+    	}
+  	}
+  for(int i = 0; i < FATSize; i++)
+  	{
+    if(i == FATSize - 1)
+    	{
+      FATptr1->fat[i + FATptr2->startingBlock] = 0x0FFFFFFF;
+			FATptr2->fat[i + FATptr2->startingBlock] = 0x0FFFFFFF;
+    	}
+    else
+    	{
+      FATptr1->fat[i + FATptr2->startingBlock] = i + FATptr2->startingBlock + 1;
+			FATptr2->fat[i + FATptr2->startingBlock] = i + FATptr2->startingBlock + 1;
+    	}
+  	}
+  FSIptr->FSI_Nxt_Free += (2 * FATSize);
+  FSIptr->FSI_Free_Count -= (2 * FATSize);
 
-		LBAwrite(FATptr1, FATSize, FATptr1->startingBlock);
-		LBAwrite(FATptr2, FATSize, FATptr2->startingBlock);
+	LBAwrite(FATptr1, FATSize, FATptr1->startingBlock);
+	LBAwrite(FATptr2, FATSize, FATptr2->startingBlock);
+	LBAwrite(FSIptr, 1, 1);
 
-		LBAwrite(FSI_ptr, 1, 1);
-
-		return 0;
+	return 0;
 }
 
-struct DirectoryEntry {
-	char DIR_Name[11];
-	uint8_t DIR_Attr;
-	uint8_t DIR_NTRes;
-	uint8_t DIR_CrtTimeTenth;
-	uint16_t DIR_CrtTime;
-	uint16_t DIR_CrtDate;
-	uint16_t DIR_LstAccDate;
-	uint16_t DIR_FstClusHI;
-	uint16_t DIR_WrtTime;
-	uint16_t DIR_WrtDate;
-	uint16_t DIR_FstClusLO;
-	uint32_t DIR_FileSize;
-};
-
-struct Directory {
-	struct DirectoryEntry Directory[16];
-} *ROOTptr;
-
-int initRootDirectory( uint64_t blockSize) {
-	int rootStartingBlock = FSI_ptr->FSI_Nxt_Free;
+int initRootDirectory() {
+	int rootStartingBlock = FSIptr->FSI_Nxt_Free;
 	ROOTptr = malloc(sizeof(struct Directory));
 	for(int i = 0; i < 2 ; i++) {
 		if(i == 0) {
@@ -238,7 +175,7 @@ int initRootDirectory( uint64_t blockSize) {
 		ROOTptr->Directory[i].DIR_LstAccDate = 0;
 		ROOTptr->Directory[i].DIR_FstClusHI = rootStartingBlock >> 8;
 		ROOTptr->Directory[i].DIR_FstClusLO = rootStartingBlock % 256;
-		ROOTptr->Directory[i].DIR_FileSize = blockSize;
+		ROOTptr->Directory[i].DIR_FileSize = VCBptr->BytesPerSector;
 		time_t currTime;
   	time(&currTime);
   	char* token;
@@ -298,15 +235,17 @@ int initRootDirectory( uint64_t blockSize) {
 																				((timeArray[5]-1980) << 11);
 	}
 
+	VCBptr->RootCluster = rootStartingBlock;
+	LBAwrite(VCBptr, VCBptr->BytesPerSector, 0);
 	LBAwrite(ROOTptr, 1, rootStartingBlock);
 	FATptr1->fat[rootStartingBlock] = 0x0FFFFFFF;
 	FATptr2->fat[rootStartingBlock] = 0x0FFFFFFF;
-	FSI_ptr->FSI_Nxt_Free += 1;
-  FSI_ptr->FSI_Free_Count -= 1;
+	FSIptr->FSI_Nxt_Free += 1;
+  FSIptr->FSI_Free_Count -= 1;
 	LBAwrite(FATptr1, VCBptr->FATSz32, FATptr1->startingBlock);
 	LBAwrite(FATptr2, VCBptr->FATSz32, FATptr2->startingBlock);
 
-	LBAwrite(FSI_ptr, 1, 1);
+	LBAwrite(FSIptr, 1, 1);
 
 
 	return 0;
@@ -316,19 +255,40 @@ int initFileSystem (uint64_t numberOfBlocks, uint64_t blockSize)
 	{
 	printf ("Initializing File System with %ld blocks with a block size of %ld\n", numberOfBlocks, blockSize);
 	/* TODO: Add any code you need to initialize your file system. */
-	VCBptr = malloc ( blockSize );
-	LBAread( VCBptr, 1, 0 );
-	if ( VCBptr->Signature != 43605 ) {
+	VCBptr = malloc(blockSize);
+	LBAread(VCBptr, 1, 0);
+	if (VCBptr->Signature != 43605)
+		{
 		initVCB(numberOfBlocks, blockSize);
 		initFAT(numberOfBlocks, blockSize);
 		initRootDirectory(blockSize);
-	}
-	printf("this is a test.\n");
+		}
+	else
+		{
+			FSIptr = malloc(sizeof(struct FSInfo));
+			FATptr1 = malloc(sizeof(struct fsFat));
+			FATptr2 = malloc(sizeof(struct fsFat));
+			ROOTptr = malloc(sizeof(struct Directory));
+			LBAread(FSIptr, 1, 1);
+			LBAread(FATptr1, VCBptr->FATSz32, 2);
+			LBAread(FATptr2, VCBptr->FATSz32, 81);
+			LBAread(ROOTptr, blockSize, VCBptr->RootCluster);
+		}
 
 	return 0;
 	}
 	
 void exitFileSystem ()
 	{
+	free(VCBptr);
+	VCBptr = NULL;
+	free(FSIptr);
+	FSIptr = NULL;
+	free(FATptr1);
+	FATptr1 = NULL;
+	free(FATptr2);
+	FATptr2 = NULL;
+	free(ROOTptr);
+	ROOTptr = NULL;
 	printf ("System exiting\n");
 	}
