@@ -76,9 +76,11 @@ extern struct VCB * VCBptr;
 extern struct FSInfo * FSIptr;
 extern struct fsFat *FATptr1, *FATptr2;
 extern struct Directory * ROOTptr;
+extern struct Directory * cwdptr;
+extern struct Directory * searchDir;
 
 int initVCB(uint64_t numberOfBlocks, uint64_t blockSize);
 int initFAT(uint64_t numberOfBlocks, uint64_t blockSize);
 int initRootDirectory();
-uint16_t getCurrentTime(struct tm* time);
-uint16_t getCurrentDate(struct tm* time);
+uint16_t getCurrentTime();
+uint16_t getCurrentDate();

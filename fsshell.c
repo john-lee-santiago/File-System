@@ -36,15 +36,15 @@
 #define DIRMAX_LEN		4096
 
 /****   SET THESE TO 1 WHEN READY TO TEST THAT COMMAND ****/
-#define CMDLS_ON	0
+#define CMDLS_ON	1
 #define CMDCP_ON	0
 #define CMDMV_ON	0
-#define CMDMD_ON	0
-#define CMDRM_ON	0
+#define CMDMD_ON	1
+#define CMDRM_ON	1
 #define CMDCP2L_ON	0
 #define CMDCP2FS_ON	0
-#define CMDCD_ON	0
-#define CMDPWD_ON	0
+#define CMDCD_ON	1
+#define CMDPWD_ON	1
 
 
 typedef struct dispatch_t
@@ -92,7 +92,6 @@ int displayFiles (fdDir * dirp, int flall, int fllong)
 	
 	struct fs_diriteminfo * di;
 	struct fs_stat statbuf;
-	
 	di = fs_readdir (dirp);
 	printf("\n");
 	while (di != NULL) 
@@ -109,6 +108,8 @@ int displayFiles (fdDir * dirp, int flall, int fllong)
 				printf ("%s\n", di->d_name);
 				}
 			}
+		free(di);
+		di = NULL;
 		di = fs_readdir (dirp);
 		}
 	fs_closedir (dirp);

@@ -30,6 +30,8 @@ struct VCB * VCBptr;
 struct FSInfo * FSIptr;
 struct fsFat * FATptr1, * FATptr2;
 struct Directory * ROOTptr;
+struct Directory * cwdptr;
+struct Directory * searchDir;
 
 
 int initVCB(uint64_t numberOfBlocks, uint64_t blockSize)
@@ -160,6 +162,10 @@ int initFAT(uint64_t numberOfBlocks, uint64_t blockSize)
 int initRootDirectory() {
 	int rootStartingBlock = FSIptr->FSI_Nxt_Free;
 	ROOTptr = malloc(sizeof(struct Directory));
+	cwdptr = malloc(sizeof(struct Directory));
+	searchDir = malloc(sizeof(struct Directory));
+	cwdptr = ROOTptr;
+	searchDir = ROOTptr;
 	for(int i = 0; i < 2 ; i++) {
 		if(i == 0) {
 			strcpy(ROOTptr->Directory[i].DIR_Name, ".");
@@ -176,8 +182,6 @@ int initRootDirectory() {
 		ROOTptr->Directory[i].DIR_FstClusHI = rootStartingBlock >> 8;
 		ROOTptr->Directory[i].DIR_FstClusLO = rootStartingBlock % 256;
 		ROOTptr->Directory[i].DIR_FileSize = VCBptr->BytesPerSector;
-		time_t currTime = time(NULL);
-		struct tm * time = localtime(&currTime);
 		ROOTptr->Directory[i].DIR_WrtTime = getCurrentTime(time);
 		ROOTptr->Directory[i].DIR_WrtDate = getCurrentDate(time);
 		}
@@ -197,13 +201,17 @@ int initRootDirectory() {
 	return 0;
 }
 
-uint16_t getCurrentTime(struct tm* time)
+uint16_t getCurrentTime()
 	{
+	time_t currTime = time(NULL);
+	struct tm * time = localtime(&currTime);
 	return (time->tm_sec / 2) | (time->tm_min << 5) | (time->tm_hour << 11);
 	}
 
-uint16_t getCurrentDate(struct tm* time)
+uint16_t getCurrentDate()
 	{
+	time_t currTime = time(NULL);
+	struct tm * time = localtime(&currTime);
 	return (time->tm_mday) | ((time->tm_mon + 1) << 5) | ((time->tm_year - 80) << 9);
 	}
 
@@ -225,10 +233,12 @@ int initFileSystem (uint64_t numberOfBlocks, uint64_t blockSize)
 		FATptr1 = malloc(blockSize * VCBptr->FATSz32);
 		FATptr2 = malloc(blockSize * VCBptr->FATSz32);
 		ROOTptr = malloc(sizeof(struct Directory));
+		cwdptr = malloc(sizeof(struct Directory));
 		LBAread(FSIptr, 1, 1);
 		LBAread(FATptr1, VCBptr->FATSz32, 2);
 		LBAread(FATptr2, VCBptr->FATSz32, 81);
 		LBAread(ROOTptr, 1, VCBptr->RootCluster);
+		cwdptr = ROOTptr;
 		}
 
 	return 0;
@@ -244,6 +254,11 @@ void exitFileSystem ()
 	FATptr1 = NULL;
 	free(FATptr2);
 	FATptr2 = NULL;
+	if(cwdptr != ROOTptr)
+		{
+		free(cwdptr);
+		cwdptr = NULL;
+		}
 	free(ROOTptr);
 	ROOTptr = NULL;
 	printf ("System exiting\n");

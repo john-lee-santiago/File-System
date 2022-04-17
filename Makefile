@@ -37,13 +37,13 @@
 ROOTNAME=fsshell
 HW=
 FOPTION=
-RUNOPTIONS=SampleVolume 10000000 512
+RUNOPTIONS=TestVolume 5120000 512
 CC=gcc
 CFLAGS= -g -I.
 LIBS =pthread
 DEPS = 
 # Add any additional objects to this list
-ADDOBJ= fsInit.o
+ADDOBJ= fsInit.o mfs.o
 ARCH = $(shell uname -m)
 
 ifeq ($(ARCH), aarch64)

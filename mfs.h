@@ -17,6 +17,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <time.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include "b_io.h"
 
@@ -85,6 +87,13 @@ struct fs_stat
 	};
 
 int fs_stat(const char *path, struct fs_stat *buf);
+
+int isValidPath(const char * path, int full);
+
+void resetSearch();
+
+int allocateBlocks(uint64_t fileSize);
+void releaseBlocks(uint64_t startingBlock, uint64_t fileSize);
 
 #endif
 
