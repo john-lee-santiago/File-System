@@ -38,7 +38,7 @@
 /****   SET THESE TO 1 WHEN READY TO TEST THAT COMMAND ****/
 #define CMDLS_ON	1
 #define CMDCP_ON	0
-#define CMDMV_ON	0
+#define CMDMV_ON	1
 #define CMDMD_ON	1
 #define CMDRM_ON	1
 #define CMDCP2L_ON	0
@@ -277,8 +277,99 @@ int cmd_cp (int argcnt, char *argvec[])
 int cmd_mv (int argcnt, char *argvec[])
 	{
 #if (CMDMV_ON == 1)				
-	return -99;
-	// **** TODO ****  For you to implement	
+	if (argcnt != 2)
+		{
+		printf("Usage: mv srcfile directory\n");
+		return -1;
+		}
+	else
+		{
+		if(fs_isFile(argvec[1]))
+			{
+			if(fs_isDir(argvec[2]))
+				{
+				if(isValidPath(argvec[2], 0) == 0)
+					{
+					for(int i = 0; i < 16; i++)
+						{
+						if(searchDir->Directory[i].DIR_Name[0] == 0x00)
+							{
+							break;
+							}
+						if(i == 15)
+							{
+							printf("Could not move file to target Directory.\n");
+							resetSearch();
+							return 0;
+							}
+						}
+					resetSearch();
+					}
+				if(isValidPath(argvec[1], 0) == 0)
+					{
+					int fileSize;
+					int fileBlockCount;
+					int fileStartingBlock;
+					char fileName[11];
+					char* filebuf;
+					strcpy(fileName, lastFileName);
+					for(int i = 0; i < 16; i++)
+						{
+						if(strcmp(searchDir->Directory[i].DIR_Name, fileName) == 0)
+							{
+							fileSize = searchDir->Directory[i].DIR_FileSize;
+							fileBlockCount = searchDir->Directory[i].DIR_FileSize / 512;
+							fileStartingBlock = getStartingBlock(i);
+							if(fileBlockCount % 512 != 0)
+								{
+								fileBlockCount++;
+								}
+							filebuf = malloc(fileBlockCount * 512);
+							LBAread(filebuf, fileBlockCount, fileStartingBlock);
+							fs_delete(argvec[1]);
+							fileStartingBlock = allocateBlocks(fileSize);
+							break;
+							}
+						}
+					if(isValidPath(argvec[2], 0) == 0)
+						{
+						for(int i = 2; i < 16; i++)
+							{
+							if(searchDir->Directory[i].DIR_Name[0] == 0x00)
+								{
+								strcpy(searchDir->Directory[i].DIR_Name, fileName);
+								searchDir->Directory[i].DIR_Attr = 0;
+								searchDir->Directory[i].DIR_NTRes = 0;
+								searchDir->Directory[i].DIR_CrtTimeTenth = 0;
+								searchDir->Directory[i].DIR_CrtTime = 0;
+								searchDir->Directory[i].DIR_CrtDate = 0;
+								searchDir->Directory[i].DIR_LstAccDate = 0;
+								searchDir->Directory[i].DIR_FstClusHI = fileStartingBlock >> 8;
+								searchDir->Directory[i].DIR_FstClusLO = fileStartingBlock % 256;
+								searchDir->Directory[i].DIR_FileSize = fileSize;
+								searchDir->Directory[i].DIR_WrtTime = getCurrentTime();
+								searchDir->Directory[i].DIR_WrtDate = getCurrentDate();
+								break;
+								}
+							}
+						LBAwrite(filebuf, fileBlockCount, fileStartingBlock);
+						LBAwrite(searchDir, 1, getStartingBlock(0));
+						free(filebuf);
+						filebuf = NULL;
+						resetSearch();
+						}
+					}
+				}
+			else
+				{
+				printf("Could not find target Directory\n");
+				}
+			}
+		else
+			{
+			printf("Could not find file.\n");
+			}
+		}
 #endif
 	return 0;
 	}

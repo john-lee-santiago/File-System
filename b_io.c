@@ -20,6 +20,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "b_io.h"
+#include "fsLow.h"
+#include "mfs.h"
+#include "fsInit.h"
 
 #define MAXFCBS 20
 #define B_CHUNK_SIZE 512
@@ -27,6 +30,10 @@
 typedef struct b_fcb
 	{
 	/** TODO add al the information you need in the file control block **/
+	int flag;
+	struct Directory * parentDirectory;
+	int fileStartingBlock;
+	int fileSize;
 	char * buf;		//holds the open file buffer
 	int index;		//holds the current position in the buffer
 	int buflen;		//holds how many valid bytes are in the buffer
@@ -68,10 +75,6 @@ b_io_fd b_open (char * filename, int flags)
 	{
 	b_io_fd returnFd;
 
-	//*** TODO ***:  Modify to save or set any information needed
-	//
-	//
-		
 	if (startup == 0) b_init();  //Initialize our system
 	
 	returnFd = b_getFCB();				// get our own file descriptor
@@ -91,9 +94,30 @@ int b_seek (b_io_fd fd, off_t offset, int whence)
 		{
 		return (-1); 					//invalid file descriptor
 		}
-		
-		
-	return (0); //Change this
+	int newOffset;
+
+	switch (whence)
+		{
+		case SEEK_SET:
+			{
+			newOffset = offset;
+			break;
+			}
+		case SEEK_CUR:
+			{
+			newOffset = fcbArray[fd].index + offset;
+			break;
+			}
+		case SEEK_END:
+			{
+			newOffset = fcbArray[fd].fileSize + offset;
+			break;
+			}
+		default:
+			return -1;
+		}
+	
+	return newOffset;
 	}
 
 

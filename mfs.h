@@ -91,9 +91,12 @@ int fs_stat(const char *path, struct fs_stat *buf);
 int isValidPath(const char * path, int full);
 
 void resetSearch();
+int getStartingBlock(int DE);
 
 int allocateBlocks(uint64_t fileSize);
 void releaseBlocks(uint64_t startingBlock, uint64_t fileSize);
+
+extern char lastFileName[11];
 
 #endif
 

@@ -17,7 +17,7 @@ int fs_mkdir(const char *pathname, mode_t mode)
     {
     if(isValidPath(pathname, 0) != 0)
       {
-        for(int i = 0; i < 16; i++)
+        for(int i = 2; i < 16; i++)
         {
         if(searchDir->Directory[i].DIR_Name[0] == 0x00)
           {
@@ -31,8 +31,7 @@ int fs_mkdir(const char *pathname, mode_t mode)
             searchDir->Directory[i].DIR_FileSize = VCBptr->BytesPerSector;
             searchDir->Directory[i].DIR_WrtTime = getCurrentTime();
             searchDir->Directory[i].DIR_WrtDate = getCurrentDate();
-            int parentStartingBlock = searchDir->Directory[0].DIR_FstClusHI << 8 |
-                                      searchDir->Directory[0].DIR_FstClusLO;
+            int parentStartingBlock = getStartingBlock(0);
             struct Directory * newDir = malloc(sizeof(struct Directory));
             strcpy(newDir->Directory[0].DIR_Name, ".");
             newDir->Directory[0].DIR_Attr = 16;
@@ -84,14 +83,19 @@ int fs_rmdir(const char *pathname)
       return 0;
       }
     }
-  int dirStartingBlock = searchDir->Directory[0].DIR_FstClusHI << 8 |
-                         searchDir->Directory[0].DIR_FstClusLO;
-  int parentStartingBlock = searchDir->Directory[1].DIR_FstClusHI << 8 |
-                            searchDir->Directory[1].DIR_FstClusLO;
-  struct Directory * parentDir = malloc(sizeof(struct Directory));
-  LBAread(parentDir, 1, parentStartingBlock);
-
-  for(int i = 0; i < 16; i++)
+  int dirStartingBlock = getStartingBlock(0);
+  int parentStartingBlock = getStartingBlock(1);
+  struct Directory * parentDir;
+  if(parentStartingBlock = VCBptr->RootCluster)
+    {
+    parentDir = ROOTptr;
+    }
+  else
+    {
+    parentDir = malloc(sizeof(struct Directory));
+    LBAread(parentDir, 1, parentStartingBlock);
+    }
+  for(int i = 2; i < 16; i++)
     {
     if(strcmp(parentDir->Directory[i].DIR_Name, lastFileName) == 0)
       {
@@ -104,13 +108,16 @@ int fs_rmdir(const char *pathname)
   printf("%s deleted.\n", pathname);
   if(searchDir == parentDir)
     {
+    printf("1\n");
     resetSearch();
     parentDir = NULL;
     }
   else
     {
-    resetSearch();
-    free(parentDir);
+    if(parentDir != ROOTptr)
+      {
+      free(parentDir);
+      }
     parentDir = NULL;
     }
   return 0;
@@ -121,8 +128,7 @@ fdDir * fs_opendir(const char *name)
   if(isValidPath(name, 0) == 0)
     {
     fdDir * dirptr = malloc(sizeof(fdDir));
-    int dirStartingBlock = searchDir->Directory[0].DIR_FstClusHI << 8 |
-                           searchDir->Directory[0].DIR_FstClusLO;
+    int dirStartingBlock = getStartingBlock(0);
     dirptr->directoryStartLocation = dirStartingBlock;
     dirptr->dirEntryPosition = 0;
     readingDirectory = 1;
@@ -154,7 +160,7 @@ int fs_closedir(fdDir *dirp)
   readingDirectory = 0;
   free(dirp);
   dirp = NULL;
-  resetSearch;
+  resetSearch();
   }
 
 int fs_stat(const char *path, struct fs_stat *buf)
@@ -196,8 +202,8 @@ int fs_setcwd(char *buf)
       }
     else
       {
-      int parentStartingBlock = cwdptr->Directory[0].DIR_FstClusHI << 8 |
-                                cwdptr->Directory[0].DIR_FstClusLO;
+      int parentStartingBlock = cwdptr->Directory[1].DIR_FstClusHI << 8 |
+                                cwdptr->Directory[1].DIR_FstClusLO;
       free(cwdptr);
       cwdptr = NULL;
       cwdptr = malloc(sizeof(struct Directory));
@@ -243,7 +249,6 @@ int fs_setcwd(char *buf)
       }
     cwdptr = NULL;
     cwdptr = searchDir;
-    searchDir = NULL;
     }
   return 0;
   }
@@ -255,11 +260,11 @@ int fs_isFile(char * path)
     resetSearch();
     return 0;
     }
-  for(int i = 0; i < 16; i++)
+  for(int i = 2; i < 16; i++)
     {
     if(strcmp(searchDir->Directory[i].DIR_Name, lastFileName) == 0)
       {
-      if(((searchDir->Directory[0].DIR_Attr % 32) >> 4) != 1)
+      if(((searchDir->Directory[i].DIR_Attr % 32) >> 4) != 1)
         {
         resetSearch();
         return 1;
@@ -281,7 +286,7 @@ int fs_isDir(char * path)
       {
       if (strcmp(searchDir->Directory[i].DIR_Name, path) == 0)
         {
-          return (((searchDir->Directory[0].DIR_Attr % 32) >> 4) == 1);
+          return (((searchDir->Directory[i].DIR_Attr % 32) >> 4) == 1);
         }
       }
     }
@@ -306,24 +311,23 @@ int fs_delete(char* filename)
   {
   int fileStartingBlock;
   int fileSize;
-  for(int i = 0; i < 16; i++)
+  for(int i = 2; i < 16; i++)
     {
     if(strcmp(searchDir->Directory[i].DIR_Name, lastFileName) == 0)
       {
-      fileStartingBlock = searchDir->Directory[i].DIR_FstClusHI << 8 |
-                          searchDir->Directory[i].DIR_FstClusLO;
+      fileStartingBlock = getStartingBlock(i);
       fileSize = searchDir->Directory[i].DIR_FileSize;
       searchDir->Directory[i].DIR_Name[0] = 0x00;
       }
     }
   releaseBlocks(fileStartingBlock, fileSize);
-  printf("%s deleted.", filename);
+  LBAwrite(searchDir, 1, getStartingBlock(0));
   resetSearch();
   return 0;
   }
 
 /* returns 0 if path is valid, 1 otherwise
-* if parameter full = 0, checks if entire path is valid,
+* if parameter full == 0, checks if entire path is valid,
 * otherwise, does not check last file
 */
 int isValidPath(const char * path, int full)
@@ -367,14 +371,13 @@ int isValidPath(const char * path, int full)
     {
     strcpy(lastFileName, pathArray[i]);
     //printf("file name search: %s\n", lastFileName);
-    for(int j = 0; j < 16; j++)
+    for(int j = 2; j < 16; j++)
       {
       if(strcmp(searchDir->Directory[j].DIR_Name, pathArray[i]) == 0)
         {
-        if(((searchDir->Directory[0].DIR_Attr % 32) >> 4) == 1)
+        if(((searchDir->Directory[j].DIR_Attr % 32) >> 4) == 1)
           {
-          int clusterBlock = searchDir->Directory[j].DIR_FstClusHI << 8 |
-                             searchDir->Directory[j].DIR_FstClusLO;
+          int clusterBlock = getStartingBlock(j);
           resetSearch();
           searchDir = malloc(sizeof(struct Directory));
           LBAread(searchDir, 1, clusterBlock);
@@ -404,6 +407,14 @@ void resetSearch()
     {
     free(searchDir);
     }
+  }
+
+int getStartingBlock(int DE)
+  {
+  int startingBlock;
+  startingBlock = searchDir->Directory[DE].DIR_FstClusHI << 8 |
+                  searchDir->Directory[DE].DIR_FstClusLO;
+  return startingBlock;
   }
 
 int allocateBlocks(uint64_t fileSize)
