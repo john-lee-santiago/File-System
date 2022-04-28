@@ -1,4 +1,18 @@
-//include any other header files you need
+/**************************************************************
+* Class:  CSC-415-01 Spring 2022
+* Names: John Santiago, Muhammed Nafees, Janelle Lara, Madina Ahmadzai
+* Student IDs: 909606963, 921941329, 920156598, 921835158
+* GitHub Name: aktails
+* Group Name: MJ's
+* Project: Basic File System
+*
+* File: mfs.c
+*
+* Description: Main file system functions needed by the driver
+* to interact with our our file system.
+*
+**************************************************************/
+
 #include <string.h>
 #include "mfs.h"
 #include "fsInit.h"
@@ -24,6 +38,7 @@ int fs_mkdir(const char *pathname, mode_t mode)
           int newDirStartingBlock = allocateBlocks(VCBptr->BytesPerSector);
           if(newDirStartingBlock > 0)
             {
+            // update parent directory
             strcpy(searchDir->Directory[i].DIR_Name, lastFileName);
             searchDir->Directory[i].DIR_Attr = 16;
             searchDir->Directory[i].DIR_FstClusHI = newDirStartingBlock >> 8;
@@ -31,7 +46,10 @@ int fs_mkdir(const char *pathname, mode_t mode)
             searchDir->Directory[i].DIR_FileSize = VCBptr->BytesPerSector;
             searchDir->Directory[i].DIR_WrtTime = getCurrentTime();
             searchDir->Directory[i].DIR_WrtDate = getCurrentDate();
+            searchDir->Directory[0].DIR_WrtTime = getCurrentTime();
+            searchDir->Directory[0].DIR_WrtTime = getCurrentTime();
             int parentStartingBlock = getStartingBlock(0);
+            // create and initialize new directory
             struct Directory * newDir = malloc(sizeof(struct Directory));
             strcpy(newDir->Directory[0].DIR_Name, ".");
             newDir->Directory[0].DIR_Attr = 16;
@@ -55,8 +73,6 @@ int fs_mkdir(const char *pathname, mode_t mode)
             LBAwrite(searchDir, 1, parentStartingBlock);
             LBAwrite(newDir, 1, newDirStartingBlock);
             resetSearch();
-            free(newDir);
-            newDir = NULL;
             printf("%s has been created.\n", pathname);
             return 0;
             }
@@ -70,6 +86,7 @@ int fs_mkdir(const char *pathname, mode_t mode)
 
 int fs_rmdir(const char *pathname)
   {
+  isValidPath(pathname, 0);
   if(strcmp(pathname, "/") == 0)
     {
     printf("Unable to delete Root Directory.\n");
@@ -85,8 +102,9 @@ int fs_rmdir(const char *pathname)
     }
   int dirStartingBlock = getStartingBlock(0);
   int parentStartingBlock = getStartingBlock(1);
+  // update parent directory
   struct Directory * parentDir;
-  if(parentStartingBlock = VCBptr->RootCluster)
+  if(parentStartingBlock == VCBptr->RootCluster)
     {
     parentDir = ROOTptr;
     }
@@ -99,16 +117,18 @@ int fs_rmdir(const char *pathname)
     {
     if(strcmp(parentDir->Directory[i].DIR_Name, lastFileName) == 0)
       {
+      // find DE corresponding to directory to be deleted, set as free
       parentDir->Directory[i].DIR_Name[0] = 0x00;
       break;
       }
     }
+  parentDir->Directory[0].DIR_WrtTime = getCurrentTime();
+  parentDir->Directory[0].DIR_WrtDate = getCurrentDate();
   LBAwrite(parentDir, 1, parentStartingBlock);
   releaseBlocks(dirStartingBlock, 512);
   printf("%s deleted.\n", pathname);
   if(searchDir == parentDir)
     {
-    printf("1\n");
     resetSearch();
     parentDir = NULL;
     }
@@ -140,7 +160,7 @@ struct fs_diriteminfo *fs_readdir(fdDir *dirp)
   {
   struct fs_diriteminfo * dirEntry = malloc(sizeof(struct fs_diriteminfo));
   while(dirp->dirEntryPosition < 16)
-    {
+    { // find all non-empty DEs
     if(searchDir->Directory[dirp->dirEntryPosition].DIR_Name[0] != 0x00)
       {
       strcpy(dirEntry->d_name, searchDir->Directory[dirp->dirEntryPosition].DIR_Name);
@@ -157,16 +177,18 @@ struct fs_diriteminfo *fs_readdir(fdDir *dirp)
 
 int fs_closedir(fdDir *dirp)
   {
+  // clean up 
   readingDirectory = 0;
   free(dirp);
   dirp = NULL;
   resetSearch();
+  return 0;
   }
 
 int fs_stat(const char *path, struct fs_stat *buf)
   {
   for(int i = 0; i < 16; i++)
-    {
+    { // find given file
     if(strcmp(searchDir->Directory[i].DIR_Name, path) == 0)
       {
       buf->st_size = searchDir->Directory[i].DIR_FileSize;
@@ -174,7 +196,7 @@ int fs_stat(const char *path, struct fs_stat *buf)
     }
   return 0;
   }
-
+// update current working directory
 char * fs_getcwd(char *buf, size_t size)
   {
   strcpy(buf, "/");
@@ -182,6 +204,7 @@ char * fs_getcwd(char *buf, size_t size)
   return buf;
   }
 
+// change directory
 int fs_setcwd(char *buf)
   {
   if(strcmp(buf, "/") == 0)
@@ -261,7 +284,7 @@ int fs_isFile(char * path)
     return 0;
     }
   for(int i = 2; i < 16; i++)
-    {
+    { // find file and check file/directory bit
     if(strcmp(searchDir->Directory[i].DIR_Name, lastFileName) == 0)
       {
       if(((searchDir->Directory[i].DIR_Attr % 32) >> 4) != 1)
@@ -283,27 +306,40 @@ int fs_isDir(char * path)
   if(readingDirectory == 1)
     {
     for(int i = 0; i < 16; i++)
-      {
+      { // find file and check file/directory bit
       if (strcmp(searchDir->Directory[i].DIR_Name, path) == 0)
         {
           return (((searchDir->Directory[i].DIR_Attr % 32) >> 4) == 1);
         }
       }
     }
+  if(isValidPath(path, 1) != 0)
+    {
+    resetSearch();
+    return 0;
+    }
+  struct Directory * parentDirectory = malloc(sizeof(struct Directory));
+  parentDirectory = searchDir;
   if(isValidPath(path, 0) != 0)
     {
     resetSearch();
     return 0;
     }
-  if(((searchDir->Directory[0].DIR_Attr % 32) >> 4) == 1)
+  for(int i = 2; i < 16; i++)
     {
-    resetSearch();
-    return 1;
-    }
-  else
-    {
-    resetSearch();
-    return 0;
+    if(strcmp(parentDirectory->Directory[i].DIR_Name, lastFileName) == 0)
+      {
+      if(((parentDirectory->Directory[i].DIR_Attr % 32) >> 4) == 1)
+        {
+        resetSearch();
+        return 1;
+        }
+      else
+        {
+        resetSearch();
+        return 0;
+        }
+      }
     }
   }
 
@@ -312,7 +348,7 @@ int fs_delete(char* filename)
   int fileStartingBlock;
   int fileSize;
   for(int i = 2; i < 16; i++)
-    {
+    { // find file, mark DE element as free, update parent directory
     if(strcmp(searchDir->Directory[i].DIR_Name, lastFileName) == 0)
       {
       fileStartingBlock = getStartingBlock(i);
@@ -321,6 +357,8 @@ int fs_delete(char* filename)
       }
     }
   releaseBlocks(fileStartingBlock, fileSize);
+  searchDir->Directory[0].DIR_WrtTime = getCurrentTime();
+  searchDir->Directory[0].DIR_WrtTime = getCurrentTime();
   LBAwrite(searchDir, 1, getStartingBlock(0));
   resetSearch();
   return 0;
@@ -358,7 +396,6 @@ int isValidPath(const char * path, int full)
   while(token != NULL)
     {
     pathArray[pathLength] = token;
-    //printf("token created: %s\n", token);
     pathLength++;
     token = strtok(NULL, "/");
     }
@@ -366,11 +403,9 @@ int isValidPath(const char * path, int full)
     {
     pathLength--;
     }
-  //printf("Searching %d levels.\n", pathLength);
   for(int i = 0; i < pathLength; i++)
     {
     strcpy(lastFileName, pathArray[i]);
-    //printf("file name search: %s\n", lastFileName);
     for(int j = 2; j < 16; j++)
       {
       if(strcmp(searchDir->Directory[j].DIR_Name, pathArray[i]) == 0)
@@ -436,12 +471,12 @@ int allocateBlocks(uint64_t fileSize)
 		for(int i = 0; i < requestedBlocks; i++)
 			{
 			if(i == requestedBlocks - 1)
-				{
-				FATptr1->fat[nextFreeCluster + i] = 0x0FFFFFFF;
-				FATptr2->fat[nextFreeCluster + i] = 0x0FFFFFFF;
+				{ // used for last block of file
+				FATptr1->fat[nextFreeCluster + i] = 0xFFFFFFFF;
+				FATptr2->fat[nextFreeCluster + i] = 0xFFFFFFFF;
 				}
 			else
-				{
+				{ // used for files occupying multiple blocks on disk
 				FATptr1->fat[nextFreeCluster + i] = nextFreeCluster + i + 1;
 				FATptr2->fat[nextFreeCluster + i] = nextFreeCluster + i + 1;
 				}

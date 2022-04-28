@@ -1,12 +1,12 @@
 /**************************************************************
-* Class:  CSC-415-0# - Fall 2021
-* Names: 
-* Student IDs:
-* GitHub Name:
-* Group Name:
+* Class:  CSC-415-01 Spring 2022
+* Names: John Santiago, Muhammed Nafees, Janelle Lara, Madina Ahmadzai
+* Student IDs: 909606963, 921941329, 920156598, 921835158
+* GitHub Name: aktails
+* Group Name: MJ's
 * Project: Basic File System
 *
-* File: fsShell.c
+* File: fsshell.c
 *
 * Description: Main driver for file system assignment.
 *
@@ -27,6 +27,7 @@
 #include "fsLow.h"
 #include "mfs.h"
 #include "fsInit.h"
+#include "b_io.h"
 
 #define PERMISSIONS (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -37,12 +38,12 @@
 
 /****   SET THESE TO 1 WHEN READY TO TEST THAT COMMAND ****/
 #define CMDLS_ON	1
-#define CMDCP_ON	0
+#define CMDCP_ON	1
 #define CMDMV_ON	1
 #define CMDMD_ON	1
 #define CMDRM_ON	1
-#define CMDCP2L_ON	0
-#define CMDCP2FS_ON	0
+#define CMDCP2L_ON	1
+#define CMDCP2FS_ON	1
 #define CMDCD_ON	1
 #define CMDPWD_ON	1
 
@@ -66,6 +67,7 @@ int cmd_cd (int argcnt, char *argvec[]);
 int cmd_pwd (int argcnt, char *argvec[]);
 int cmd_history (int argcnt, char *argvec[]);
 int cmd_help (int argcnt, char *argvec[]);
+void setFileName(char* path);
 
 dispatch_t dispatchTable[] = {
 	{"ls", cmd_ls, "Lists the file in a directory"},
@@ -259,6 +261,7 @@ int cmd_cp (int argcnt, char *argvec[])
 	
 	
 	testfs_src_fd = b_open (src, O_RDONLY);
+	setFileName(argvec[1]);
 	testfs_dest_fd = b_open (dest, O_WRONLY | O_CREAT | O_TRUNC);
 	do 
 		{
@@ -268,6 +271,7 @@ int cmd_cp (int argcnt, char *argvec[])
 	b_close (testfs_src_fd);
 	b_close (testfs_dest_fd);
 #endif
+
 	return 0;
 	}
 	
@@ -277,13 +281,13 @@ int cmd_cp (int argcnt, char *argvec[])
 int cmd_mv (int argcnt, char *argvec[])
 	{
 #if (CMDMV_ON == 1)				
-	if (argcnt != 2)
+	if (argcnt != 3)
 		{
 		printf("Usage: mv srcfile directory\n");
 		return -1;
 		}
 	else
-		{
+		{ // check if file and destination directory both exist
 		if(fs_isFile(argvec[1]))
 			{
 			if(fs_isDir(argvec[2]))
@@ -291,7 +295,7 @@ int cmd_mv (int argcnt, char *argvec[])
 				if(isValidPath(argvec[2], 0) == 0)
 					{
 					for(int i = 0; i < 16; i++)
-						{
+						{ // check if new parent directory has space for a new directory entry
 						if(searchDir->Directory[i].DIR_Name[0] == 0x00)
 							{
 							break;
@@ -308,26 +312,23 @@ int cmd_mv (int argcnt, char *argvec[])
 				if(isValidPath(argvec[1], 0) == 0)
 					{
 					int fileSize;
-					int fileBlockCount;
 					int fileStartingBlock;
 					char fileName[11];
-					char* filebuf;
+					int wrtTime;
+					int wrtDate;
 					strcpy(fileName, lastFileName);
-					for(int i = 0; i < 16; i++)
-						{
+					for(int i = 2; i < 16; i++)
+						{ // get file's information from old parent
 						if(strcmp(searchDir->Directory[i].DIR_Name, fileName) == 0)
 							{
 							fileSize = searchDir->Directory[i].DIR_FileSize;
-							fileBlockCount = searchDir->Directory[i].DIR_FileSize / 512;
 							fileStartingBlock = getStartingBlock(i);
-							if(fileBlockCount % 512 != 0)
-								{
-								fileBlockCount++;
-								}
-							filebuf = malloc(fileBlockCount * 512);
-							LBAread(filebuf, fileBlockCount, fileStartingBlock);
-							fs_delete(argvec[1]);
-							fileStartingBlock = allocateBlocks(fileSize);
+							wrtTime = searchDir->Directory[i].DIR_WrtTime;
+							wrtDate = searchDir->Directory[i].DIR_WrtDate;
+							searchDir->Directory[i].DIR_Name[0] = 0x00;
+							searchDir->Directory[0].DIR_WrtTime = getCurrentTime();
+  						searchDir->Directory[0].DIR_WrtTime = getCurrentTime();
+							LBAwrite(searchDir, 1, getStartingBlock(0));
 							break;
 							}
 						}
@@ -336,7 +337,7 @@ int cmd_mv (int argcnt, char *argvec[])
 						for(int i = 2; i < 16; i++)
 							{
 							if(searchDir->Directory[i].DIR_Name[0] == 0x00)
-								{
+								{ // store file's information in new parent
 								strcpy(searchDir->Directory[i].DIR_Name, fileName);
 								searchDir->Directory[i].DIR_Attr = 0;
 								searchDir->Directory[i].DIR_NTRes = 0;
@@ -347,15 +348,14 @@ int cmd_mv (int argcnt, char *argvec[])
 								searchDir->Directory[i].DIR_FstClusHI = fileStartingBlock >> 8;
 								searchDir->Directory[i].DIR_FstClusLO = fileStartingBlock % 256;
 								searchDir->Directory[i].DIR_FileSize = fileSize;
-								searchDir->Directory[i].DIR_WrtTime = getCurrentTime();
-								searchDir->Directory[i].DIR_WrtDate = getCurrentDate();
+								searchDir->Directory[i].DIR_WrtTime = wrtTime;
+								searchDir->Directory[i].DIR_WrtDate = wrtDate;
+								searchDir->Directory[0].DIR_WrtTime = getCurrentTime();
+								searchDir->Directory[0].DIR_WrtDate = getCurrentDate();
 								break;
 								}
 							}
-						LBAwrite(filebuf, fileBlockCount, fileStartingBlock);
 						LBAwrite(searchDir, 1, getStartingBlock(0));
-						free(filebuf);
-						filebuf = NULL;
 						resetSearch();
 						}
 					}
@@ -497,9 +497,9 @@ int cmd_cp2fs (int argcnt, char *argvec[])
 			return (-1);
 		}
 	
-	
-	testfs_fd = b_open (dest, O_WRONLY | O_CREAT | O_TRUNC);
 	linux_fd = open (src, O_RDONLY);
+	setFileName(argvec[1]);
+	testfs_fd = b_open (dest, O_WRONLY | O_CREAT | O_TRUNC);
 	do 
 		{
 		readcnt = read (linux_fd, buf, BUFFERLEN);
@@ -702,13 +702,34 @@ void processcommand (char * cmd)
 			return;
 			}
 		}
-	printf("%s is not a regonized command.\n", cmdv[0]);
+	printf("%s is not a recognized command.\n", cmdv[0]);
 	cmd_help(cmdc, cmdv);	
 	free (cmdv);
 	cmdv = NULL;
 	}
 
-
+void setFileName(char* path)
+	{
+	char fileName[11];
+	int count = 0;
+	int index = 0;
+	// pulls the last string in the path, ignoring "/"s
+	do
+		{
+    if(strncmp(path + index, "/", 1) == 0){
+      count = 0;
+    }
+    else{
+      if(count < sizeof(fileName)){
+        strncpy(fileName + count, path + index, 1);
+        fileName[count + 1] = '\0';
+        count++;
+      }
+    }
+    index++;
+		} while (index < strlen(path));
+	strcpy(copyFileName, fileName);
+	}
 
 int main (int argc, char * argv[])
 	{

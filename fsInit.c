@@ -1,16 +1,14 @@
 /**************************************************************
-* Class:  CSC-415-0# Fall 2021
-* Names: 
-* Student IDs:
-* GitHub Name:
-* Group Name:
+* Class:  CSC-415-01 Spring 2022
+* Names: John Santiago, Muhammed Nafees, Janelle Lara, Madina Ahmadzai
+* Student IDs: 909606963, 921941329, 920156598, 921835158
+* GitHub Name: aktails
+* Group Name: MJ's
 * Project: Basic File System
 *
 * File: fsInit.c
 *
 * Description: Main driver for file system assignment.
-*
-* This file is where you will start and initialize your system
 *
 **************************************************************/
 
@@ -127,8 +125,8 @@ int initFAT(uint64_t numberOfBlocks, uint64_t blockSize)
   	{
     if(i == FATSize - 1)
     	{
-      FATptr1->fat[i + FATptr1->startingBlock] = 0x0FFFFFFF;
-			FATptr2->fat[i + FATptr1->startingBlock] = 0x0FFFFFFF;
+      FATptr1->fat[i + FATptr1->startingBlock] = 0xFFFFFFFF;
+			FATptr2->fat[i + FATptr1->startingBlock] = 0xFFFFFFFF;
     	}
     else
     	{
@@ -140,8 +138,8 @@ int initFAT(uint64_t numberOfBlocks, uint64_t blockSize)
   	{
     if(i == FATSize - 1)
     	{
-      FATptr1->fat[i + FATptr2->startingBlock] = 0x0FFFFFFF;
-			FATptr2->fat[i + FATptr2->startingBlock] = 0x0FFFFFFF;
+      FATptr1->fat[i + FATptr2->startingBlock] = 0xFFFFFFFF;
+			FATptr2->fat[i + FATptr2->startingBlock] = 0xFFFFFFFF;
     	}
     else
     	{
@@ -188,8 +186,8 @@ int initRootDirectory() {
 	VCBptr->RootCluster = rootStartingBlock;
 	LBAwrite(VCBptr, VCBptr->BytesPerSector, 0);
 	LBAwrite(ROOTptr, 1, rootStartingBlock);
-	FATptr1->fat[rootStartingBlock] = 0x0FFFFFFF;
-	FATptr2->fat[rootStartingBlock] = 0x0FFFFFFF;
+	FATptr1->fat[rootStartingBlock] = 0xFFFFFFFF;
+	FATptr2->fat[rootStartingBlock] = 0xFFFFFFFF;
 	FSIptr->FSI_Nxt_Free += 1;
   FSIptr->FSI_Free_Count -= 1;
 	LBAwrite(FATptr1, VCBptr->FATSz32, FATptr1->startingBlock);

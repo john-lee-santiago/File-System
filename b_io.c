@@ -1,9 +1,9 @@
 /**************************************************************
-* Class:  CSC-415-0# Fall 2021
-* Names: 
-* Student IDs:
-* GitHub Name:
-* Group Name:
+* Class:  CSC-415-01 Spring 2022
+* Names: John Santiago, Muhammed Nafees, Janelle Lara, Madina Ahmadzai
+* Student IDs: 909606963, 921941329, 920156598, 921835158
+* GitHub Name: aktails
+* Group Name: MJ's
 * Project: Basic File System
 *
 * File: b_io.c
@@ -27,13 +27,17 @@
 #define MAXFCBS 20
 #define B_CHUNK_SIZE 512
 
+char copyFileName[11];
+
 typedef struct b_fcb
 	{
 	/** TODO add al the information you need in the file control block **/
+	char fileName[11];
 	int flag;
 	struct Directory * parentDirectory;
 	int fileStartingBlock;
 	int fileSize;
+	int blockCount;
 	char * buf;		//holds the open file buffer
 	int index;		//holds the current position in the buffer
 	int buflen;		//holds how many valid bytes are in the buffer
@@ -74,13 +78,61 @@ b_io_fd b_getFCB ()
 b_io_fd b_open (char * filename, int flags)
 	{
 	b_io_fd returnFd;
-
+		
 	if (startup == 0) b_init();  //Initialize our system
 	
 	returnFd = b_getFCB();				// get our own file descriptor
 										// check for error - all used FCB's
-	
-	return (returnFd);						// all set
+	if(returnFd != -1)
+		{ // checks whether file is to be read or written to
+		if(flags == O_RDONLY)
+			{
+			if(isValidPath(filename, 0) == 0)
+				{
+				fcbArray[returnFd].parentDirectory = searchDir;
+				fcbArray[returnFd].flag = O_RDONLY;
+				for(int i = 2; i < 16; i++)
+					{
+					if(strcmp(fcbArray[returnFd].parentDirectory->Directory[i].DIR_Name, lastFileName) == 0)
+						{ // get inportant file information
+						fcbArray[returnFd].fileStartingBlock = getStartingBlock(i);
+						fcbArray[returnFd].fileSize = searchDir->Directory[i].DIR_FileSize;
+						fcbArray[returnFd].blockCount = fcbArray[returnFd].fileSize / B_CHUNK_SIZE;
+						if(fcbArray[returnFd].fileSize % B_CHUNK_SIZE > 0)
+							{
+							fcbArray[returnFd].blockCount++;
+							}
+						fcbArray[returnFd].buf = malloc(fcbArray[returnFd].blockCount * B_CHUNK_SIZE);
+						LBAread(fcbArray[returnFd].buf, fcbArray[returnFd].blockCount,
+										fcbArray[returnFd].fileStartingBlock);
+						fcbArray[returnFd].index = 0;
+						fcbArray[returnFd].buflen = fcbArray[returnFd].fileSize;
+						}
+					}
+				}
+			}
+		else
+			{
+			if(isValidPath(filename, 0) == 0)
+				{
+				fs_delete(filename);
+				if(isValidPath(filename, 0) == 0)
+					{/* no-op */}
+				}
+			// prepare file to be written
+			strcpy(fcbArray[returnFd].fileName, copyFileName);
+			copyFileName[0] = '\0';
+			fcbArray[returnFd].parentDirectory = searchDir;
+			fcbArray[returnFd].flag = O_WRONLY | O_CREAT | O_TRUNC;
+			fcbArray[returnFd].fileStartingBlock = 0;
+			fcbArray[returnFd].fileSize = 0;
+			fcbArray[returnFd].blockCount = 1;
+			fcbArray[returnFd].buf = malloc(B_CHUNK_SIZE);
+			fcbArray[returnFd].index = 0;
+			fcbArray[returnFd].buflen = 0;
+			}
+		}
+	return returnFd;						// all set
 	}
 
 
@@ -132,9 +184,16 @@ int b_write (b_io_fd fd, char * buffer, int count)
 		{
 		return (-1); 					//invalid file descriptor
 		}
-		
-		
-	return (0); //Change this
+	if(count + fcbArray[fd].buflen > fcbArray[fd].blockCount * B_CHUNK_SIZE)
+		{
+		fcbArray[fd].blockCount++;
+		fcbArray[fd].buf = realloc(fcbArray[fd].buf, fcbArray[fd].blockCount * B_CHUNK_SIZE);
+		}
+	memcpy(fcbArray[fd].buf + fcbArray[fd].index, buffer, count);
+	fcbArray[fd].index = b_seek(fd, count, SEEK_CUR);
+	fcbArray[fd].buflen += count;
+
+	return count; //Change this
 	}
 
 
@@ -168,12 +227,56 @@ int b_read (b_io_fd fd, char * buffer, int count)
 		{
 		return (-1); 					//invalid file descriptor
 		}
+	int bytesRead = fcbArray[fd].buflen;
+	if(fcbArray[fd].buflen > count)
+		{
+		bytesRead = count;
+		}
+	memcpy(buffer, fcbArray[fd].buf + fcbArray[fd].index, bytesRead);
+	fcbArray[fd].index = b_seek(fd, bytesRead, SEEK_CUR);
+	fcbArray[fd].buflen -= bytesRead;
 		
-	return (0);	//Change this
+	return bytesRead;	//Change this
 	}
 	
 // Interface to Close the file	
 void b_close (b_io_fd fd)
 	{
-
+	if(fcbArray[fd].flag != O_RDONLY)
+		{
+		fcbArray[fd].fileSize = fcbArray[fd].buflen;
+		fcbArray[fd].fileStartingBlock = allocateBlocks(fcbArray[fd].fileSize);
+		for(int i = 2; i < 16; i++)
+			{
+			if(fcbArray[fd].parentDirectory->Directory[i].DIR_Name[0] == 0x00)
+				{
+				strcpy(fcbArray[fd].parentDirectory->Directory[i].DIR_Name, fcbArray[fd].fileName);
+				fcbArray[fd].parentDirectory->Directory[i].DIR_Attr = 0;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_NTRes = 0;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_CrtTimeTenth = 0;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_CrtTime = 0;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_CrtDate = 0;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_LstAccDate = 0;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_FstClusHI = fcbArray[fd].
+																																	 fileStartingBlock >> 8;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_FstClusLO = fcbArray[fd].
+																																	 fileStartingBlock % 256;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_FileSize = fcbArray[fd].fileSize;
+				fcbArray[fd].parentDirectory->Directory[i].DIR_WrtTime = getCurrentTime();
+				fcbArray[fd].parentDirectory->Directory[i].DIR_WrtDate = getCurrentDate();
+				break;
+				}
+			}
+		LBAwrite(fcbArray[fd].buf, fcbArray[fd].blockCount, fcbArray[fd].fileStartingBlock);
+		int parentStartingBlock = fcbArray[fd].parentDirectory->Directory[0].DIR_FstClusHI << 8 |
+															fcbArray[fd].parentDirectory->Directory[0].DIR_FstClusLO;
+		LBAwrite(fcbArray[fd].parentDirectory, 1, parentStartingBlock);
+		}
+	fcbArray[fd].flag = 0;
+	fcbArray[fd].fileStartingBlock = 0;
+	fcbArray[fd].fileSize = 0;
+	//free(fcbArray[fd].buf);
+	fcbArray[fd].buf = NULL;
+	fcbArray[fd].buflen = 0;
+	fcbArray[fd].index = 0;
 	}

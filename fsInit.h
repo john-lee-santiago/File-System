@@ -1,3 +1,16 @@
+/**************************************************************
+* Class:  CSC-415-01 Spring 2022
+* Names: John Santiago, Muhammed Nafees, Janelle Lara, Madina Ahmadzai
+* Student IDs: 909606963, 921941329, 920156598, 921835158
+* GitHub Name: aktails
+* Group Name: MJ's
+* Project: Basic File System
+*
+* File: fsInit.h
+*
+* Description: Interface for main driver of file system assignment.
+*
+**************************************************************/
 #include <stdint.h>
 
 #pragma pack(1)
